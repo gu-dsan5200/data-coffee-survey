@@ -39,19 +39,26 @@ multi_value_group_prefixes <- c(
     "why_"
 )
 
+ordinal_vars <- field_mapping |> filter(attribute_type == "ordinal") |> pull(friendly_name)
+categorical_variables <- field_mapping |> filter(attribute_type == "categorical") |> pull(friendly_name)
+
+## get a printout of all the unique values for variables I want to convert to factor
+
+raw %>%
+  select(all_of(field_mapping |> filter(create_factor == "y") |> pull(friendly_name))) %>%
+  purrr::map(unique)
+
+
 # get id and tasting fields, convert to text
 # make it long and split the keys
 # then add the overall preference from the a_b_c_preference and a_d_preference columns
 # tasting_results <-
 tasting_subset_wide <- raw |>
-    select(id, a_b_c_preference, a_d_preference, all_of(tasting_fields))
+    select(id, a_b_c_preference, a_d_preference, overall_favorite, all_of(tasting_fields))
     
+
 tasting_subset_wide |>
-    select(-id) |>
-    group_by(across(everything())) |>
-    count()
-
-
+    select(id, all_of(tas))
     |>
     mutate(
         across(
@@ -85,74 +92,60 @@ summarize_multi_entry <- function(raw, grp) {
         select(id, starts_with(!!grp)) |>
         select(!ends_with("_all")) |>
         select(!ends_with("_detail")) |>
-        mutate(across(starts_with(!!grp), as.integer),
-               across(starts_with(!!grp), replace_na, 0)) 
-    
+        mutate(across(starts_with(!!grp), as.integer)) |>
+        rename_with(~ str_replace(.x, pattern = grp, replacement = ""))
 
     set_count <-
         set_prep |>
         rowwise() |>
         mutate(
-            selection_ct = sum(across(starts_with(!!grp)), na.rm = T)
+            selection_ct = sum(across(!id), na.rm = T)
         ) |>
         ungroup()
 
     assign(x = glue::glue("{grp}set_count"), value = set_count, envir = .GlobalEnv)
 
-    set_count_histogram <- 
+    set_count_histogram <-
         set_count |>
         count(selection_ct) |>
-        mutate(pct = n / sum(n))
+        mutate(pct = n / sum(n)) |>
+        ungroup()
 
     assign(x = glue::glue("{grp}set_count_histogram"), value = set_count_histogram, envir = .GlobalEnv)
 
-    option_count <-
+    option_long <-
         set_count |>
         select(-selection_ct) |>
-        pivot_longer(-id) |>
-        mutate(option = gsub(grp, "", name)) |>
-        count(option, value)
+        pivot_longer(-c(id)) |>
+        rename(option = name)
 
+    assign(x = glue::glue("{grp}option_long"), value = option_long, envir = .GlobalEnv)
+        
+    option_count <-
+        option_long |> 
+        count(option, value) |>
+        ungroup()
+ 
     assign(x = glue::glue("{grp}option_count"), value = option_count, envir = .GlobalEnv)
 
     permutation_count <-
         set_count |>
-        group_by(across(starts_with(!!grp))) |>
-        count()
+        select(-c(id, selection_ct)) |> 
+        group_by(across(everything())) |>
+        count() |>
+        ungroup() |> 
+        mutate(pct = n / sum(n))
+    
 
     assign(x = glue::glue("{grp}permutation_count"), value = permutation_count, envir = .GlobalEnv)
 }
 
-summarize_multi_entry(raw, "where_")
+# debug(summarize_multi_entry)
+
+# summarize_multi_entry(raw, "where_")
 
 for (p in multi_value_group_prefixes) {
     summarize_multi_entry(raw, p)
 }
-ls()
 
 
-
-debug(aggregate_multi_selection)
-
-where_agg <- aggregate_multi_selection(raw, "where_") 
-where_agg_ct <- 
-    where_agg |>
-    summarize_multi_selection()
-
-where_agg_tally <-
-    where_agg |> 
-    tally_individual_values(grp = "where_")
-
-# where_agg_permutations <-
-where_agg |>
-    group_by(across(starts_with("where_"))) |>
-    count()
-
-where_agg |> 
-group_by(across(starts_with("where_"))
-
-
-count(starts_with("where_"))
-
-|>
-    summarize_multi_selection()
