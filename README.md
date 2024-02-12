@@ -1,11 +1,14 @@
 # The Great American Coffee Taste Test
 
-https://cometeer.com/pages/the-great-american-coffee-taste-test
-https://rmckeon.medium.com/great-american-coffee-taste-test-breakdown-7f3fdcc3c41d
+Start here:
 
-Data file: https://bit.ly/gacttCSV+
+* <https://cometeer.com/pages/the-great-american-coffee-taste-test>
+* <https://rmckeon.medium.com/great-american-coffee-taste-test-breakdown-7f3fdcc3c41d>
+
+Original data file: https://bit.ly/gacttCSV+
 
 This is being used to illustrate the following:
+
 - How to think of breaking down your data depending on the unit of analysis
 - How to process the data for the purposes of visualization
 - How to best visualize different aspects of the data (and units of analysis)
