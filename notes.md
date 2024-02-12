@@ -86,7 +86,7 @@ Data pre-processing:
 - Loaded CSV but used the new names as field names
 - Tallied up multiple metrics for each of the multi-valued preferences
 - Separated the tasting results from demographic data
-- Coded variables as categorical or ordinal 
+- Coded certain variables as categorical or ordinal 
 - Saved as parquet to keep data type
 
 

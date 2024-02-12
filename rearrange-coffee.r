@@ -28,6 +28,16 @@ tasting_fields <-
         expand.grid(c("a_", "b_", "c_", "d_"), c("bitterness", "acidity", "preference", "notes"))
     )
 
+tasting_subset_wide <- raw |>
+    select(id, a_b_c_preferred, a_d_preferred, overall_favorite, all_of(tasting_fields)) |>
+    mutate(
+        across(contains(c("acidity", "bitterness", "preference")), ~ factor(.x, levels = 1:5)),
+        across(contains(c("preferred", "favorite")), ~ factor(gsub("Coffee ", "", .x)))
+    )
+
+arrow::write_parquet(tasting_subset_wide, "tasting-subset-wide.parquet")
+
+
 multi_value_group_prefixes <- c(
     "where_",
     "brew_",
@@ -39,44 +49,93 @@ multi_value_group_prefixes <- c(
     "why_"
 )
 
-ordinal_vars <- field_mapping |> filter(attribute_type == "ordinal") |> pull(friendly_name)
-categorical_variables <- field_mapping |> filter(attribute_type == "categorical") |> pull(friendly_name)
+ordinal_vars_no_taste <-
+    field_mapping |>
+    filter(
+        attribute_type == "ordinal",
+        !(friendly_name %in% names(tasting_subset_wide)),
+        create_factor == "y"
+    ) |>
+    pull(friendly_name)
+
+categorical_variables_no_taste <-
+    field_mapping |>
+    filter(
+        attribute_type == "categorical", create_factor == "y",
+        !(friendly_name %in% names(tasting_subset_wide))
+    ) |>
+    pull(friendly_name)
+
 
 ## get a printout of all the unique values for variables I want to convert to factor
 
-raw %>%
-  select(all_of(field_mapping |> filter(create_factor == "y") |> pull(friendly_name))) %>%
-  purrr::map(unique)
-
+# raw %>%
+#  select(all_of(field_mapping |> filter(create_factor == "y") |> pull(friendly_name))) %>%
+#  purrr::map(unique)
 
 # get id and tasting fields, convert to text
-# make it long and split the keys
-# then add the overall preference from the a_b_c_preference and a_d_preference columns
-# tasting_results <-
-tasting_subset_wide <- raw |>
-    select(id, a_b_c_preference, a_d_preference, overall_favorite, all_of(tasting_fields))
-    
 
 tasting_subset_wide |>
-    select(id, all_of(tas))
-    |>
     mutate(
-        across(
-            everything(), as.character
-        )
-    ) |>
+        across(contains(c("acidity", "bitterness", "preference")), ~ factor(.x, levels = 1:5)),
+        across(contains(c("preferred", "favorite")), ~ factor(gsub("Coffee ", "", .x)))
+    )
+
+tasting_subset_long <-
+    tasting_subset_wide |>
+    select(id, contains(c("acidity", "bitterness", "preferemce"))) |>
     pivot_longer(-id) |>
-    separate(name, into = c("coffee", "measurement"), sep = "_")
+    separate(name, into = c("coffee", "measurement"), sep = "_") |>
+    mutate(coffee = toupper(coffee))
+arrow::write_parquet(tasting_subset_long, "tasting-subset-long.parquet")
+
+all_other_fields <-
+    names(raw)[
+        !names(raw) %in% c(
+            names(tasting_subset_wide),
+            grep(paste(multi_value_group_prefixes, collapse = "|"), names(raw), value = T),
+            field_mapping |> filter(remove_from_demo == "y") |> pull(friendly_name)
+        )
+    ]
+
+# get rest of data and convert to factors
+
+# manually ordered ordinal factors using
+age_group_levels <- unique(raw$age_group)[c(6, 1, 2, 3, 8, 4, 7)]
+cups_per_day_levels <- unique(raw$cups_per_day)[c(2, 4, 3, 5, 7, 6)]
+preference_strength_levels <- unique(raw$preference_strength)[c(6, 2, 4, 3, 5)]
+preference_roast_levels <- unique(raw$preference_roast)[c(2, 3, 4, 5, 6, 7, 8)]
+preference_caffeine_levels <- unique(raw$preference_caffeine)[c(4, 3, 2)]
+coffee_expertise_levels <- unique(raw$coffee_expertise) # 1 to 10 int
+monthly_spend_levels <- unique(raw$monthly_spend)[c(6, 4, 3, 5, 7, 2)]
+most_spent_per_cup_levels <- unique(raw$most_spent_per_cup)[c(9, 3, 2, 5, 6, 4, 8, 7)]
+most_willing_to_pay_levels <- unique(raw$most_willing_to_pay)[c(9, 8, 5, 6, 2, 7, 4, 3)]
+equipment_spent_levels <- unique(raw$equipment_spent)[c(8, 7, 3, 4, 5, 2, 6)]
+education_level_levels <- unique(raw$education_level)[c(4, 7, 5, 2, 3, 6)]
+number_of_children_levels <- unique(raw$number_of_children)[c(3, 6, 4, 5, 2)]
 
 
-all_other_fields <- names(raw)[!names(raw) %in% c(tasting_fields, multi_value_group_prefixes, )]
-
-resp_data <-
+respondent_data <-
     raw |>
-    select(all_of(all_other_fields))
+    select(id, all_of(all_other_fields)) |>
+    mutate(across(all_of(categorical_variables_no_taste), ~ factor(.x))) |>
+    mutate(
+        age_group = factor(age_group, levels = age_group_levels, ordered = T),
+        cups_per_day = factor(cups_per_day, levels = cups_per_day_levels, ordered = T),
+        preference_strength = factor(preference_strength, levels = preference_strength_levels, ordered = T),
+        preference_roast = factor(preference_roast, levels = preference_roast_levels, ordered = T),
+        preference_caffeine = factor(preference_caffeine, levels = preference_caffeine_levels, ordered = T),
+        coffee_expertise = factor(coffee_expertise, levels = 1:10, ordered = T),
+        monthly_spend = factor(monthly_spend, levels = monthly_spend_levels, ordered = T),
+        most_spent_per_cup = factor(most_spent_per_cup, levels = most_spent_per_cup_levels, ordered = T),
+        most_willing_to_pay = factor(most_willing_to_pay, levels = most_willing_to_pay_levels, ordered = T),
+        equipment_spent = factor(equipment_spent, levels = equipment_spent_levels, ordered = T),
+        education_level = factor(education_level, levels = education_level_levels, ordered = T),
+        number_of_children = factor(number_of_children, levels = number_of_children_levels, ordered = T)
+    )
 
 
-skimr::skim(resp_data)
+skimr::skim(respondent_data)
 
 
 # https://www.r-bloggers.com/2020/08/survey-categorical-variables-with-kableextra/
@@ -95,6 +154,11 @@ summarize_multi_entry <- function(raw, grp) {
         mutate(across(starts_with(!!grp), as.integer)) |>
         rename_with(~ str_replace(.x, pattern = grp, replacement = ""))
 
+    # assign_and_save <- function(df, grp, path = "./data/analytical") {
+    #    if !dir.exists(path) dir.create(path)
+    #    nm <- glue::glue("{grp}")
+    # }
+
     set_count <-
         set_prep |>
         rowwise() |>
@@ -103,7 +167,9 @@ summarize_multi_entry <- function(raw, grp) {
         ) |>
         ungroup()
 
-    assign(x = glue::glue("{grp}set_count"), value = set_count, envir = .GlobalEnv)
+    fname <- glue::glue("{grp}set_count")
+    write_csv(set_count, fname, na = "")
+    assign(x = fname, value = set_count, envir = .GlobalEnv)
 
     set_count_histogram <-
         set_count |>
@@ -111,7 +177,9 @@ summarize_multi_entry <- function(raw, grp) {
         mutate(pct = n / sum(n)) |>
         ungroup()
 
-    assign(x = glue::glue("{grp}set_count_histogram"), value = set_count_histogram, envir = .GlobalEnv)
+    fname <- glue::glue("{grp}set_count_histogram")
+    write_csv(set_count_histogram, fname, na = "")
+    assign(x = fname, value = set_count_histogram, envir = .GlobalEnv)
 
     option_long <-
         set_count |>
@@ -119,25 +187,30 @@ summarize_multi_entry <- function(raw, grp) {
         pivot_longer(-c(id)) |>
         rename(option = name)
 
-    assign(x = glue::glue("{grp}option_long"), value = option_long, envir = .GlobalEnv)
-        
+    fname <- glue::glue("{grp}option_long")
+    write_csv(option_long, fname, na = "")
+    assign(x = fname, value = option_long, envir = .GlobalEnv)
+
     option_count <-
-        option_long |> 
+        option_long |>
         count(option, value) |>
         ungroup()
- 
-    assign(x = glue::glue("{grp}option_count"), value = option_count, envir = .GlobalEnv)
+
+    fname <- glue::glue("{grp}option_count")
+    write_csv(option_count, fname, na = "")
+    assign(x = fname, value = option_count, envir = .GlobalEnv)
 
     permutation_count <-
         set_count |>
-        select(-c(id, selection_ct)) |> 
+        select(-c(id, selection_ct)) |>
         group_by(across(everything())) |>
         count() |>
-        ungroup() |> 
+        ungroup() |>
         mutate(pct = n / sum(n))
-    
 
-    assign(x = glue::glue("{grp}permutation_count"), value = permutation_count, envir = .GlobalEnv)
+    fname <- glue::glue("{grp}permutation_count")
+    write_csv(permutation_count, fname, na = "")
+    assign(x = fname, value = permutation_count, envir = .GlobalEnv)
 }
 
 # debug(summarize_multi_entry)
@@ -148,4 +221,4 @@ for (p in multi_value_group_prefixes) {
     summarize_multi_entry(raw, p)
 }
 
-
+## generate factors
