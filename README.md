@@ -89,17 +89,5 @@ Data pre-processing:
 - Coded certain variables as categorical or ordinal 
 - Saved as parquet to keep data type
 
-
-vis types:
-upset plot (in lieu of venn)
-
-
-
-
-
-Outcomes: each individual coffee rating
-- features: all the demographic data
-
-
-
+Run the script `process-coffee-survey-data.R` from the command line using `Rscript process-coffee-survey-data.R`. All the outputs are created in the `data/analytical` subdirectory.
 
