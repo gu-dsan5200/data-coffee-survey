@@ -91,3 +91,4 @@ Data pre-processing:
 
 Run the script `process-coffee-survey-data.R` from the command line using `Rscript process-coffee-survey-data.R`. All the outputs are created in the `data/analytical` subdirectory.
 
+The resulting csv's and parquet files can be read into multiple tools.
